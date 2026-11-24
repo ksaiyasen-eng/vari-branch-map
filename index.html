@@ -134,6 +134,9 @@ body.collapsed #toggle svg{transform:rotate(180deg)}
 .warn{display:flex;gap:8px;align-items:flex-start;padding:10px 12px;border-radius:10px;background:var(--est-bg);color:var(--est);font-size:13px;margin:4px 0 8px}
 .warn svg{width:18px;height:18px;fill:currentColor;flex:none;margin-top:1px}
 .ok-note{margin:0;font-size:12.5px;color:var(--real)}
+.newc-form .sub-h{display:block;margin:14px 0 2px;font-size:13.5px}
+.maps-row{display:flex;gap:8px;margin-top:4px}
+.maps-row input{flex:1;min-width:0}
 .found{margin:8px 24px 4px;padding:12px 14px;border:1px solid var(--est);border-radius:12px;background:var(--est-bg)}
 .found h3{margin:0 0 2px;font-size:15px;color:var(--est)}
 .found p{margin:0 0 6px;font-size:13px}
@@ -158,8 +161,9 @@ body.collapsed #toggle svg{transform:rotate(180deg)}
 .probe-form{display:flex;gap:8px;margin-top:4px}
 .probe-form input{flex:1;min-width:0;height:42px;padding:0 12px;border:1px solid var(--line);border-radius:10px;background:var(--soft);color:var(--ink);font:inherit}
 .probe-form input:focus{outline:2px solid var(--brand);outline-offset:-1px;background:var(--panel)}
-.btn{height:42px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.btn{height:42px;padding:0 16px;border-radius:10px;border:1px solid var(--line);background:var(--panel);font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:6px;white-space:nowrap;color:var(--ink);text-decoration:none}
 .btn:hover{background:var(--hover)}
+.btn:disabled{opacity:.55;cursor:wait}
 .btn svg{width:18px;height:18px;fill:var(--brand)}
 .btn.fill{background:var(--brand);border-color:var(--brand);color:var(--brand-ink)}
 .btn.fill:hover{filter:brightness(1.07)}
@@ -613,7 +617,7 @@ function renderList() {
       <div class="qp-head">${ICON.pin}<div><b>ກວດສາຂາຂອງລູກຄ້າ</b><small>ລູກຄ້າໃໝ່ຢູ່ເຂດສາຂາໃດ? ມີຢູ່ແລ້ວບໍ່?</small></div></div>
       <label class="field-label" for="qpIn">ພິກັດ ຫຼື ລິ້ງ Google Maps</label>
       <div class="probe-form"><input id="qpIn" placeholder="17.9757, 102.6331" autocomplete="off"><button class="btn fill" type="submit">ກວດ</button></div>
-      <button type="button" class="linkbtn" id="qpPick">ຫຼື ຄລິກເລືອກຈຸດເທິງແຜນທີ່</button>
+      <button type="button" class="linkbtn" id="qpPick">ຫຼື ກົດເລືອກຈຸດເທິງແຜນທີ່</button>
     </form>
     <div id="results"></div>`;
   $('qpForm').onsubmit = e => {
@@ -692,7 +696,7 @@ function renderPlace(i) {
     <div id="profileBox"></div>
     <div class="facts">
       <div class="fact">${ICON.people}<div>${b['ລູກຄ້າ'].toLocaleString()} ລູກຄ້າ<small>ຈຸດລູກຄ້າທີ່ມີພິກັດ</small></div></div>
-      <div class="fact">${ICON.pin}<div>${has ? `<a href="${gm}" target="_blank" rel="noopener">${b.Lat}, ${b.Lng}</a>` : 'ຍັງບໍ່ມີພິກັດ'}<small>${b['ທີ່ມາ'] === REAL ? 'ພິກັດຮ້ານຈິງ' : b['ທີ່ມາ'] === EST ? 'ປະມານ: ຈຸດກາງຂອງລູກຄ້າ, ບໍ່ແມ່ນທີ່ຕັ້ງຮ້ານ' : 'ກົດ ວາງໝຸດ ແລ້ວຄລິກແຜນທີ່'}</small></div></div>
+      <div class="fact">${ICON.pin}<div>${has ? `<a href="${gm}" target="_blank" rel="noopener">${b.Lat}, ${b.Lng}</a>` : 'ຍັງບໍ່ມີພິກັດ'}<small>${b['ທີ່ມາ'] === REAL ? 'ພິກັດຮ້ານຈິງ' : b['ທີ່ມາ'] === EST ? 'ປະມານ: ຈຸດກາງຂອງລູກຄ້າ, ບໍ່ແມ່ນທີ່ຕັ້ງຮ້ານ' : 'ກົດ ວາງໝຸດ ແລ້ວກົດແຜນທີ່'}</small></div></div>
     </div>
     <div class="tip">${ICON.info.replace('<svg', '<svg style="display:inline;width:16px;height:16px;vertical-align:-3px;fill:currentColor"')} ລາກໝຸດເທິງແຜນທີ່ໄປບ່ອນຮ້ານຈິງໄດ້ເລີຍ. ແກ້ຄົບແລ້ວ ກົດ ດາວໂຫຼດ CSV ແລ້ວເອົາໄປແທນ branch_locations.csv.</div>`;
   $('panelBody').querySelector('h2').textContent = b['ສາຂາ'];
@@ -1010,7 +1014,7 @@ function runProbe(lat, lng) {
   $('panelBody').scrollTop = 0; // a new result always starts at the verdict, not where the last one was scrolled
   const far = res.used.length ? res.used[res.used.length - 1].d : 2; // km to the farthest neighbour used
   const hit = nearestAll(lat, lng, 1)[0];
-  if (hit && hit.d <= SAME_SPOT_KM) { showCustomer(hit.k); return; } // an existing customer at this spot: show their user card at once
+  if (hit && hit.d <= SAME_SPOT_KM) { const f = document.querySelector('.found'); if (f) $('panelBody').scrollTop += f.getBoundingClientRect().top - $('panelBody').getBoundingClientRect().top - 8; showCustomer(hit.k); return; } // an existing customer at this spot: show their user card at once
   map.flyTo({center: [lng, lat], zoom: far < .4 ? 16 : far < .9 ? 15 : far < 1.8 ? 14 : 13, padding: pad(), duration: 800});
 }
 function clearProbe() {
@@ -1103,6 +1107,10 @@ const mostCommon = arr => {
   return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
 };
 const NEW_KEY = 'vari_new_customers';
+// ERP address dropdowns use bare names; the 9 districts of Vientiane Capital give the province
+const bare = (v, prefix) => String(v || '').replace(new RegExp('^' + prefix + '\\s*'), '').trim();
+const CAPITAL = new Set(['ຈັນທະບູລີ', 'ສີໂຄດຕະບອງ', 'ໄຊເສດຖາ', 'ສີສັດຕະນາກ', 'ນາຊາຍທອງ', 'ໄຊທານີ', 'ຫາດຊາຍຟອງ', 'ສັງທອງ', 'ປາກງື່ມ']);
+const provinceOf = district => CAPITAL.has(bare(district, 'ເມືອງ')) ? 'ນະຄອນຫຼວງວຽງຈັນ' : '';
 let newDraft = null; // unsaved new-customer form {spot, values}
 // n nearest customers over every point (the vote in assess() skips closed branches; duplicate checks must not)
 function nearestAll(lat, lng, n) {
@@ -1135,7 +1143,7 @@ function renderNewCustomer(out, branchIdx) {
   const sameNew = allNew().filter(c => km(lat, lng, c.lat, c.lng) <= SAME_SPOT_KM);
   // village + district: most common among existing customers within 1 km
   const around = nearestAll(lat, lng, 10).filter(n => n.d <= 1).map(n => infoOf(n.k));
-  const guess = {village: mostCommon(around.map(v => v['ບ້ານ'])), district: mostCommon(around.map(v => v['ເມືອງ']))};
+  const guess = {village: bare(mostCommon(around.map(v => v['ບ້ານ'])), 'ບ້ານ'), district: bare(mostCommon(around.map(v => v['ເມືອງ'])), 'ເມືອງ')};
   const sec = document.createElement('div');
   sec.className = 'newc';
   sec.innerHTML = `
@@ -1145,12 +1153,16 @@ function renderNewCustomer(out, branchIdx) {
       <div id="nearList"></div></div>
     <form class="prof form newc-form" id="newForm">
       <div class="prof-head"><b>ຂໍ້ມູນລູກຄ້າໃໝ່</b><span class="pill est">${lat.toFixed(6)}, ${lng.toFixed(6)}</span></div>
-      <label>ຊື່ລູກຄ້າ<input name="name" maxlength="120" required></label>
-      <label>ເບີໂທ<input name="phone" inputmode="tel" maxlength="40"></label>
+      <p class="prof-meta">ລຽງຕາມຟອມ "ເພີ່ມລູກຄ້າໃໝ່" ໃນ ERP. ທີ່ຢູ່, ສາຂາ ແລະ ຕຳແໜ່ງ ລະບົບໃສ່ໃຫ້ແລ້ວ: ກວດ ແລະ ຕື່ມສ່ວນທີ່ຫວ່າງ. ລະຫັດ, ປະເພດ ແລະ ເງື່ອນໄຂຊຳລະ ເລືອກໃນ ERP.</p>
+      <label>ຊື່ລູກຄ້າ *<input name="name" maxlength="120" required></label>
+      <label>ເບີໂທ *<input name="phone" inputmode="tel" maxlength="40" required pattern=".*[0-9].*" title="ໃສ່ເບີໂທ" placeholder="020XXXXXXXX"></label>
       <div id="phoneWarn"></div>
-      <p class="prof-meta">ສາຂາ, ບ້ານ, ເມືອງ, ໂຊນ ແລະ ວັນສົ່ງ ລະບົບໃສ່ໃຫ້ຈາກລູກຄ້າໃກ້ຄຽງ: ກວດ ແລະ ຕື່ມສ່ວນທີ່ຍັງຫວ່າງ.</p>
-      <div class="two"><label>ບ້ານ<input name="village" maxlength="80" placeholder="ຍັງບໍ່ມີ: ກະລຸນາໃສ່"></label><label>ເມືອງ<input name="district" maxlength="80" placeholder="ຍັງບໍ່ມີ: ກະລຸນາໃສ່"></label></div>
-      <label>ສາຂາ<select name="branch" required></select></label>
+      <b class="sub-h">ທີ່ຢູ່</b>
+      <label>ແຂວງ<input name="province" maxlength="60" placeholder="ຍັງບໍ່ມີ: ກະລຸນາໃສ່"></label>
+      <div class="two"><label>ເມືອງ<input name="district" maxlength="80" placeholder="ຍັງບໍ່ມີ: ກະລຸນາໃສ່"></label><label>ບ້ານ<input name="village" maxlength="80" placeholder="ຍັງບໍ່ມີ: ກະລຸນາໃສ່"></label></div>
+      <label>ສາຂາ *<select name="branch" required></select></label>
+      <label>ຕຳແໜ່ງໃນແຜນທີ່ *<span class="maps-row"><input name="maps" readonly value="https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}"><button type="button" class="btn" id="copyMaps">${ICON.copy}ສຳເນົາ</button></span></label>
+      <b class="sub-h">ສຳລັບຂົນສົ່ງ (ບໍ່ມີໃນຟອມ ERP)</b>
       <div class="two"><label>ໂຊນ<input name="zone" maxlength="80"></label><label>ວັນສົ່ງ<input name="day" maxlength="20"></label></div>
       <label>ໝາຍເຫດ<input name="note" maxlength="200"></label>
       <div class="probe-acts"><button type="button" class="btn" id="copyNew">${ICON.copy}ສຳເນົາໄປສ້າງຢູເຊີ</button><button class="btn fill" type="submit">ບັນທຶກລາຍການ</button></div>
@@ -1175,6 +1187,8 @@ function renderNewCustomer(out, branchIdx) {
     el.textContent = `ລູກຄ້າໃໝ່ທີ່ບັນທຶກແລ້ວ: ${c.name} · ${c.branch} · ${c.status === 'ສ້າງແລ້ວ' ? 'ສ້າງຢູເຊີແລ້ວ' : 'ລໍຖ້າສ້າງຢູເຊີ'}`;
     $('foundList').appendChild(el);
   });
+  const found = sec.querySelector('.found');
+  if (found) out.prepend(found); // an existing customer is the first thing to see, above the branch verdict
 
   const f = $('newForm');
   if (branchIdx === null) f.elements.branch.add(new Option('— ເລືອກສາຂາ (ນອກເຂດ: ໃຫ້ຜູ້ຈັດການຕັດສິນ) —', '', true, true));
@@ -1190,6 +1204,9 @@ function renderNewCustomer(out, branchIdx) {
   };
   f.elements.branch.onchange = suggest; suggest();
   f.elements.village.value = guess.village; f.elements.district.value = guess.district;
+  f.elements.province.value = provinceOf(guess.district);
+  f.elements.district.addEventListener('input', () => { if (!f.elements.province.value) f.elements.province.value = provinceOf(f.elements.district.value); });
+  $('copyMaps').onclick = () => navigator.clipboard.writeText(f.elements.maps.value).then(() => toast('ສຳເນົາລິ້ງແຜນທີ່ແລ້ວ: ວາງໃສ່ຊ່ອງ ຕຳແໜ່ງໃນແຜນທີ່ ໃນ ERP'), () => toast(f.elements.maps.value));
   f.elements.phone.oninput = () => {
     const key = phoneKey(f.elements.phone.value), box = $('phoneWarn');
     box.innerHTML = '';
@@ -1210,13 +1227,13 @@ function renderNewCustomer(out, branchIdx) {
   };
   const record = () => ({
     name: f.elements.name.value.trim(), phone: f.elements.phone.value.trim(),
-    village: f.elements.village.value.trim(), district: f.elements.district.value.trim(),
+    province: f.elements.province.value.trim(), village: f.elements.village.value.trim(), district: f.elements.district.value.trim(),
     branch: f.elements.branch.value === '' ? '' : B[+f.elements.branch.value]['ສາຂາ'], zone: f.elements.zone.value.trim(), day: f.elements.day.value.trim(),
     note: f.elements.note.value.trim(), lat: +lat.toFixed(6), lng: +lng.toFixed(6),
     maps: `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`
   });
-  const asText = c => [`ຊື່: ${c.name}`, `ເບີໂທ: ${c.phone}`, `ບ້ານ: ${c.village}`, `ເມືອງ: ${c.district}`, `ສາຂາ: ${c.branch}`, `ໂຊນ: ${c.zone}`, `ວັນສົ່ງ: ${c.day}`,
-    `ພິກັດ: ${c.lat}, ${c.lng}`, `ແຜນທີ່: ${c.maps}`, c.note && `ໝາຍເຫດ: ${c.note}`].filter(Boolean).join('\n');
+  const asText = c => [`ຊື່ລູກຄ້າ: ${c.name}`, `ເບີໂທ: ${c.phone}`, `ແຂວງ: ${c.province || provinceOf(c.district)}`, `ເມືອງ: ${c.district}`, `ບ້ານ: ${c.village}`,
+    `ສາຂາ: ${c.branch}`, `ຕຳແໜ່ງໃນແຜນທີ່: ${c.maps}`, '— ສຳລັບຂົນສົ່ງ —', `ໂຊນ: ${c.zone}`, `ວັນສົ່ງ: ${c.day}`, c.note && `ໝາຍເຫດ: ${c.note}`].filter(Boolean).join('\n');
   const count = () => {
     const n = newList().length, shared = serverNew !== null;
     $('newCount').innerHTML = n ? `${shared ? 'ລູກຄ້າໃໝ່ລໍຖ້າສ້າງຢູເຊີ (ທັງທີມ)' : 'ລາຍການລູກຄ້າໃໝ່ໃນເຄື່ອງນີ້'}: ${n} ລາຍ · <button type="button" class="linkbtn" id="showNew">ເບິ່ງລາຍການ</button> · <button type="button" class="linkbtn" id="dlNew">ດາວໂຫຼດ CSV</button>${shared ? '' : ' · <button type="button" class="linkbtn" id="clrNew">ລ້າງລາຍການ</button>'}` : '';
@@ -1233,7 +1250,7 @@ function renderNewCustomer(out, branchIdx) {
       el.className = 'new-row';
       el.innerHTML = `<button type="button" class="linkbtn nm"></button><small></small><span class="new-acts"></span>`;
       el.querySelector('.nm').textContent = c.name;
-      el.querySelector('small').textContent = `${c.branch} · ${c.phone || '-'} · ${(c.saved_at || c.created_at || '').slice(0, 10)}`;
+      el.querySelector('small').textContent = [c.village, c.branch, c.phone || '-', (c.saved_at || c.created_at || '').slice(0, 10)].filter(Boolean).join(' · ');
       el.querySelector('.nm').onclick = () => runProbe(c.lat, c.lng);
       if (serverNew !== null && c.id) {
         const done = document.createElement('button');
@@ -1253,7 +1270,7 @@ function renderNewCustomer(out, branchIdx) {
   };
   count();
   // keep typed values if the probe view re-renders (search box, chips, dragging a pin...) for the same spot
-  const spot = `${lat.toFixed(6)},${lng.toFixed(6)}`, NEW_FIELDS = ['name', 'phone', 'village', 'district', 'branch', 'zone', 'day', 'note'];
+  const spot = `${lat.toFixed(6)},${lng.toFixed(6)}`, NEW_FIELDS = ['name', 'phone', 'province', 'village', 'district', 'branch', 'zone', 'day', 'note'];
   if (newDraft && newDraft.spot === spot) {
     NEW_FIELDS.forEach(k => { if (newDraft.values[k] !== undefined) f.elements[k].value = newDraft.values[k]; });
     f.elements.phone.oninput();
@@ -1292,12 +1309,12 @@ function renderNewCustomer(out, branchIdx) {
 }
 
 function downloadNew() {
-  const cols = ['name', 'phone', 'village', 'district', 'branch', 'zone', 'day', 'lat', 'lng', 'maps', 'note', 'saved_at', 'created_by'];
+  const cols = ['name', 'phone', 'province', 'district', 'village', 'branch', 'zone', 'day', 'lat', 'lng', 'maps', 'note', 'saved_at', 'created_by'];
   // typed text starting with = + - @ would run as an Excel formula; phone keeps its leading 0 as ="020..."
   const cell = (k, v) => k === 'phone' && v ? `="${String(v).replace(/"/g, '')}"` : typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
-  const head = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ບ້ານ', 'ເມືອງ', 'ສາຂາ', 'ແຜນ/ໂຊນ', 'ວັນ', 'Lat', 'Lng', 'Google Maps', 'ໝາຍເຫດ', 'ບັນທຶກເມື່ອ', 'ຜູ້ບັນທຶກ'];
+  const head = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ແຂວງ', 'ເມືອງ', 'ບ້ານ', 'ສາຂາ', 'ແຜນ/ໂຊນ', 'ວັນ', 'Lat', 'Lng', 'Google Maps', 'ໝາຍເຫດ', 'ບັນທຶກເມື່ອ', 'ຜູ້ບັນທຶກ'];
   const q = v => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : (v ?? '');
-  const csv = '﻿' + [head.join(','), ...newList().map(c => ({...c, maps: c.maps || `https://www.google.com/maps?q=${c.lat},${c.lng}`, saved_at: c.saved_at || c.created_at})).map(c => cols.map(k => q(cell(k, c[k]))).join(','))].join('\n');
+  const csv = '﻿' + [head.join(','), ...newList().map(c => ({...c, province: c.province || provinceOf(c.district), maps: c.maps || `https://www.google.com/maps?q=${c.lat},${c.lng}`, saved_at: c.saved_at || c.created_at})).map(c => cols.map(k => q(cell(k, c[k]))).join(','))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
   a.download = `new_customers_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -1307,7 +1324,7 @@ function downloadNew() {
 function startPicking() {
   stopPlacing();
   picking = true;
-  $('bannerText').textContent = 'ຄລິກແຜນທີ່ບ່ອນລູກຄ້າ';
+  $('bannerText').textContent = 'ກົດແຜນທີ່ບ່ອນລູກຄ້າ';
   $('banner').classList.add('show');
   $('map').classList.add('placing');
   if (isPhone()) collapse();
@@ -1351,7 +1368,7 @@ const pad = () => isPhone() ? {bottom: innerHeight * .46, top: 110, left: 0, rig
 function startPlacing(i) {
   stopPlacing();
   placing = i;
-  $('bannerText').textContent = `ຄລິກແຜນທີ່ບ່ອນຮ້ານ ${short(B[i]['ສາຂາ'])}`;
+  $('bannerText').textContent = `ກົດແຜນທີ່ບ່ອນຮ້ານ ${short(B[i]['ສາຂາ'])}`;
   $('banner').classList.add('show');
   $('map').classList.add('placing');
   if (isPhone()) collapse();
@@ -1490,7 +1507,7 @@ $('download').onclick = () => {
   toast('ດາວໂຫຼດ branch_locations.csv ແລ້ວ');
 };
 
-map.once('load', () => map.easeTo({padding: pad(), duration: 0}));
+map.once('load', () => { if (!map.isMoving()) map.easeTo({padding: pad(), duration: 0}); }); // don't cancel a move the user already started
 render();
 loadProfiles();
 } // end start()
