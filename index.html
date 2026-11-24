@@ -64,7 +64,6 @@ body.collapsed #toggle svg{transform:rotate(180deg)}
 .brandrow picture,.brandrow img{display:block;height:56px;width:auto}
 .brandrow h1{border-left:2px solid var(--line);padding-left:14px;font-size:21px;line-height:1.25}
 .brandrow h1 small{display:block;font-size:12px;font-weight:500;color:var(--muted)}
-/* the official logo files have a white backdrop: sit them on a white chip in dark mode */
 
 .chips{display:flex;gap:8px;margin-top:10px;overflow-x:auto;scrollbar-width:none;padding-bottom:4px}
 .chips::-webkit-scrollbar{display:none}
@@ -313,21 +312,22 @@ body.labels .mk .lbl,.mk.sel .lbl,.mk:hover .lbl{display:block}
 /* ---------- phone: bottom sheet ---------- */
 @media (max-width:760px){
   #top{left:12px;right:12px;width:auto}
-  #panel{top:auto;width:auto;right:0;height:46vh;border-radius:16px 16px 0 0;transition:height .25s ease}
-  body.expanded #panel{height:88vh}
+  #panel{top:auto;width:auto;right:0;height:46vh;height:46dvh;border-radius:16px 16px 0 0;transition:height .25s ease}
+  body.expanded #panel{height:88vh;height:88dvh}
   body.collapsed #panel{transform:none;height:96px}
   #panelBody{margin-top:0;border-top:0}
   #toggle{display:none}
   .handle{display:block;width:100%;border:0;background:none;padding:10px 0 4px;cursor:pointer;flex:none}
   .handle i{display:block;width:36px;height:4px;border-radius:2px;background:var(--line);margin:0 auto}
-  #layers,body.collapsed #layers{left:12px;bottom:calc(46vh + 12px)}
-  #zoom{bottom:calc(46vh + 12px)}
+  #layers,body.collapsed #layers{left:12px;bottom:calc(46vh + 12px);bottom:calc(46dvh + 12px);z-index:5}
+  #layerMenu{flex-wrap:wrap;max-width:calc(100vw - 92px)} /* wraps instead of running under the zoom buttons */
+  #zoom{bottom:calc(46vh + 12px);bottom:calc(46dvh + 12px)}
   body.collapsed #layers{bottom:108px} body.collapsed #zoom{bottom:108px}
   body.expanded #layers,body.expanded #zoom,body.expanded #download{display:none}
   .layer{width:56px;height:56px}
   /* 44 px touch targets on phones */
   .iconbtn,#zoom .fab,.zgroup button{width:44px;height:44px}
-  .btn,.probe-tools .btn,.new-row .btn,.probe-acts .btn,.cc-acts .btn{height:44px;min-height:44px}
+  .btn,.probe-tools .btn,.new-row .btn,.probe-acts .btn,.cc-acts .btn,.prof-head .btn{height:44px;min-height:44px}
   .probe-form input,.prof.form input,.prof.form select,.newc-form select{min-height:44px}
   .linkbtn{min-height:44px;display:inline-flex;align-items:center}
   /* chips keep their 32 px look but get a 44 px tap area; the sheet handle is a full 44 px bar */
@@ -339,14 +339,13 @@ body.labels .mk .lbl,.mk.sel .lbl,.mk:hover .lbl{display:block}
   .cust-pop .maplibregl-popup-content{max-height:max(160px, calc(54vh - 195px));overflow-y:auto;padding:12px 14px 10px}
   .cc dl{gap:2px 10px;margin:8px 0;font-size:12.5px}
   .cc h3{font-size:15px}
-  #download{height:44px}
-  #download{top:auto;bottom:calc(46vh + 12px);right:64px;height:40px;padding:0 14px}
+  #download{top:auto;bottom:calc(46vh + 12px);bottom:calc(46dvh + 12px);right:64px;height:44px;padding:0 14px}
   #download .txt{display:none}
   body.collapsed #download{bottom:108px}
   #banner,body.collapsed #banner{top:112px;transform:translateX(-50%);max-width:calc(100% - 24px)}
-  #toast,body.collapsed #toast{transform:translate(-50%,16px);bottom:calc(46vh + 70px)}
+  #toast,body.collapsed #toast{transform:translate(-50%,16px);bottom:calc(46vh + 70px);bottom:calc(46dvh + 70px)}
+  body.collapsed #toast{bottom:160px} /* sheet collapsed: sit just above it, not mid-map */
   #toast.show,body.collapsed #toast.show{transform:translate(-50%,0)}
-  .hero{height:130px}
   .maplibregl-ctrl-scale{display:none}
 }
 
@@ -592,9 +591,9 @@ function openCustCard(lngLat, k, minZoom = 0) {
   custPopup.remove();
   custPopup = new maplibregl.Popup({closeButton: true, maxWidth: '300px', offset: 10, className: 'cust-pop', anchor: isPhone() ? 'bottom' : undefined});
   if (isPhone()) {
-    const H = innerHeight;
+    const H = innerHeight, S = sheetH() || H * .46;
     // padding first, then the move: animating padding + zoom together lands the dot in the wrong place
-    map.setPadding({top: Math.max(0, H * .54 - 48), bottom: H * .46, left: 0, right: 0});
+    map.setPadding({top: Math.max(0, H - S - 48), bottom: S, left: 0, right: 0});
     map.easeTo({center: lngLat, zoom: Math.max(map.getZoom(), minZoom), duration: 300});
   }
   custPopup.setLngLat(lngLat).setHTML(custCard(k)).addTo(map);
@@ -828,7 +827,7 @@ let token = gateToken || store.get('bp_token'), profiles = {}, editing = false;
 let draft = null; // unsaved profile edits {branch, values}: survive any re-render of the card
 let serverNew = null; // shared new-customer list from the server; null = not logged in (this device's list is used)
 
-// branch pin / open-closed edits go to the server so the whole team sees them (offline private copy: CSV only)
+// branch pin / open-closed edits go to the server so the whole team sees them; without signal or PIN they wait in a queue on this device
 const PENDING_KEY = 'vari_pending_branch';
 const pendingSaves = () => { try { return JSON.parse(store.get(PENDING_KEY) || '{}'); } catch (_) { return {}; } };
 async function saveBranch(i, fields, okMsg) {
@@ -842,29 +841,36 @@ async function saveBranch(i, fields, okMsg) {
   toast(r.error === 'auth' ? `${okMsg} · ເກັບໄວ້ໃນເຄື່ອງນີ້: ຈະບັນທຶກໃຫ້ທີມເມື່ອເຂົ້າ PIN` : `ຍັງບໍ່ໄດ້ບັນທຶກຂຶ້ນເຊີບເວີ (${errMsg(r)}): ຈະລອງໃໝ່ອັດຕະໂນມັດ`);
 }
 async function flushPending() {
-  const q = pendingSaves(), left = {};
+  const q = pendingSaves(), done = [];
   for (const [branch, fields] of Object.entries(q)) {
     const r = await api('setBranch', {branch, ...fields});
-    if (r.ok && r.skipped) toast(`ການແກ້ທີ່ຄ້າງໄວ້ຂອງ ${branch} ບໍ່ໄດ້ໃຊ້: ທີມແກ້ສາຂານີ້ໃໝ່ກວ່າແລ້ວ`);
-    // drop only an edit for a branch that no longer exists anywhere; anything else is retried next time
-    if (!r.ok && !(r.detail === 'unknown_branch' && !B.some(b => b['ສາຂາ'] === branch))) left[branch] = fields;
-    if (!r.ok && !left[branch]) toast(`ຍົກເລີກການແກ້ທີ່ຄ້າງໄວ້ຂອງ ${branch}: ສາຂານີ້ບໍ່ມີແລ້ວ`);
+    if (r.ok) { done.push([branch, fields.at]); if (r.skipped) toast(`ການແກ້ທີ່ຄ້າງໄວ້ຂອງ ${branch} ບໍ່ໄດ້ໃຊ້: ທີມແກ້ສາຂານີ້ໃໝ່ກວ່າແລ້ວ`); continue; }
+    // the server will refuse it the same way every time (unknown branch, bad coordinates): drop it, say so
+    if (r.error === 'bad_input') { done.push([branch, fields.at]); toast(`ຍົກເລີກການແກ້ທີ່ຄ້າງໄວ້ຂອງ ${branch}: ${errMsg(r)}`); }
   }
-  store.set(PENDING_KEY, Object.keys(left).length ? JSON.stringify(left) : null);
-  if (Object.keys(q).length && !Object.keys(left).length) toast('ບັນທຶກການແກ້ທີ່ຄ້າງໄວ້ຂຶ້ນເຊີບເວີແລ້ວ');
+  // re-read: an edit queued while this loop was waiting must survive; drop only what was sent unchanged
+  const now = pendingSaves();
+  done.forEach(([branch, at]) => { if (now[branch] && now[branch].at === at) delete now[branch]; });
+  store.set(PENDING_KEY, Object.keys(now).length ? JSON.stringify(now) : null);
+  if (done.length && !Object.keys(now).length) toast('ບັນທຶກການແກ້ທີ່ຄ້າງໄວ້ຂຶ້ນເຊີບເວີແລ້ວ');
 }
-// new customers saved on this phone before the shared list existed: send them up once, then clear
+// new customers kept on this phone (offline, PIN expired, or refused by the server): send them, keep the reason for the rest
 async function flushLocalNew() {
   const list = localNew();
   if (!list.length) return;
-  const left = [];
+  const same = (a, b) => a.client_id ? a.client_id === b.client_id : a.name === b.name && a.phone === b.phone && a.lat === b.lat && a.lng === b.lng && a.saved_at === b.saved_at;
+  const sent = [], failed = [];
   for (const c of list) {
     const r = await api('addNew', {customer: c});
-    if (r.ok) serverNew = [r.customer, ...(serverNew || [])]; else left.push(c); // never delete a customer that is nowhere else
+    if (r.ok) { sent.push(c); serverNew = [r.customer, ...(serverNew || []).filter(x => x.id !== r.customer.id)]; continue; }
+    failed.push({...c, err: r.error === 'bad_input' ? r.detail : r.error}); // never delete a customer that is nowhere else
   }
-  if (left.length) toast(`ລູກຄ້າໃໝ່ ${left.length} ລາຍ ຍັງສົ່ງບໍ່ໄດ້ (${left.map(c => c.name).slice(0, 3).join(', ')}): ສາຂາປິດແລ້ວ ຫຼື ບໍ່ມີ. ເບິ່ງໃນ ລາຍການລໍຖ້າ ແລ້ວບັນທຶກໃໝ່ກັບສາຂາອື່ນ`);
-  store.set(NEW_KEY, left.length ? JSON.stringify(left) : null);
-  if (list.length > left.length) toast(`ສົ່ງລາຍການລູກຄ້າໃໝ່ຈາກເຄື່ອງນີ້ ${list.length - left.length} ລາຍ ໃຫ້ທີມແລ້ວ`);
+  // re-read: a customer saved on this phone while the loop was waiting must survive
+  const now = localNew().filter(x => !sent.some(c => same(c, x))).map(x => failed.find(c => same(c, x)) || x);
+  store.set(NEW_KEY, now.length ? JSON.stringify(now) : null);
+  const refused = failed.filter(c => REFUSED.has(c.err));
+  if (refused.length) toast(`ລູກຄ້າໃໝ່ ${refused.length} ລາຍ ສົ່ງບໍ່ໄດ້ (${refused.map(c => c.name).slice(0, 3).join(', ')}): ສາຂາປິດແລ້ວ ຫຼື ບໍ່ມີ. ເບິ່ງໃນ ລາຍການລໍຖ້າ ແລ້ວບັນທຶກໃໝ່ກັບສາຂາອື່ນ`);
+  if (sent.length) toast(`ສົ່ງລາຍການລູກຄ້າໃໝ່ຈາກເຄື່ອງນີ້ ${sent.length} ລາຍ ໃຫ້ທີມແລ້ວ`);
 }
 // apply the team's saved edits on top of the built map data
 function applyState(rows) {
@@ -888,12 +894,16 @@ function applyState(rows) {
 function applyServer(r) {
   setProfiles(r.profiles);
   applyState(r.state);
-  if (Array.isArray(r.newCustomers)) serverNew = r.newCustomers;
+  if (Array.isArray(r.newCustomers)) {
+    const fresh = (serverNew || []).filter(c => c.id && !r.newCustomers.some(x => x.id === c.id) && Date.now() - Date.parse(c.created_at) < 120e3);
+    serverNew = [...fresh, ...r.newCustomers];
+    if (r.truncated) toast('ລາຍການລູກຄ້າໃໝ່ຫຼາຍເກີນ: ລາຍການເກົ່າສຸດບໍ່ໄດ້ຢູ່ໃນການກວດຊ້ຳ. ແຈ້ງຜູ້ດູແລລະບົບ');
+  }
 }
 const ERR = {bad_pin: 'PIN ບໍ່ຖືກ', locked: 'ລັອກຊົ່ວຄາວ ລອງໃໝ່ພາຍຫຼັງ', conflict: 'ມີຄົນແກ້ກ່ອນແລ້ວ: ໂຫຼດຂໍ້ມູນໃໝ່ແລ້ວ, ສິ່ງທີ່ທ່ານພິມຍັງຢູ່ ກົດບັນທຶກອີກຄັ້ງ',
-  not_ready: 'ລະບົບຍັງບໍ່ໄດ້ຕັ້ງ PIN', closed_branch: 'ສາຂານີ້ປິດແລ້ວ: ເລືອກສາຂາອື່ນ', bad_input: 'ຂໍ້ມູນບໍ່ຖືກ', server: 'ເຊີບເວີຜິດພາດ', network: 'ເຊື່ອມຕໍ່ອິນເຕີເນັດບໍ່ໄດ້',
+  not_ready: 'ລະບົບຍັງບໍ່ໄດ້ຕັ້ງ PIN', closed_branch: 'ສາຂານີ້ປິດແລ້ວ: ເລືອກສາຂາອື່ນ', not_found: 'ບໍ່ພົບລາຍການນີ້ (ອາດຖືກລຶບແລ້ວ)', unknown_branch: 'ບໍ່ມີສາຂານີ້ໃນແຜນທີ່', bad_input: 'ຂໍ້ມູນບໍ່ຖືກ', server: 'ເຊີບເວີຜິດພາດ', network: 'ເຊື່ອມຕໍ່ອິນເຕີເນັດບໍ່ໄດ້',
   auth: 'ໝົດເວລາເຂົ້າລະບົບ ກະລຸນາໃສ່ PIN ໃໝ່'};
-const errMsg = r => (ERR[r.error] || r.error || 'ຜິດພາດ') + (r.error === 'bad_pin' && r.detail ? ` (ເຫຼືອ ${r.detail} ຄັ້ງ)` : r.error === 'locked' && r.detail ? ` ${r.detail} ນາທີ` : '');
+const errMsg = r => (ERR[r.error === 'bad_input' && ERR[r.detail] ? r.detail : r.error] || r.error || 'ຜິດພາດ') + (r.error === 'bad_pin' && r.detail ? ` (ເຫຼືອ ${r.detail} ຄັ້ງ)` : r.error === 'locked' && r.detail ? ` ${r.detail} ນາທີ` : '');
 // tel: link for the first number only (a cell may list two numbers)
 // 8-digit numbers in the ERP are mobiles stored without 020 (confirmed by user 2026-11-24); 20XXXXXXXX lost its 0
 const firstTel = s => { const t = (String(s || '').split(/[\/,;|]/)[0] || '').replace(/[^\d+]/g, ''); return /^\d{8}$/.test(t) ? '020' + t : /^20\d{8}$/.test(t) ? '0' + t : t; };
@@ -932,6 +942,7 @@ async function syncOnce(force) {
 }
 // signed photo links last 24 h: refresh them every 12 h while the page stays open
 setInterval(loadProfiles, 12 * 3600e3);
+addEventListener('online', () => loadProfiles()); // signal back: send what is waiting now, not in 12 h
 
 function renderProfile(i) {
   const box = $('profileBox'), name = B[i]['ສາຂາ'], p = profiles[name];
@@ -1162,6 +1173,7 @@ function renderProbe() {
     $('probeRes').innerHTML = `<p class="howto">ວິທີເອົາພິກັດຈາກ Google Maps: ກົດຄ້າງບ່ອນລູກຄ້າ → ສຳເນົາຕົວເລກພິກັດທີ່ຂຶ້ນມາ → ວາງໃສ່ຊ່ອງດ້ານເທິງ. ຫຼືພິມພິກັດໃສ່ຊ່ອງຄົ້ນຫາດ້ານເທິງ ແລ້ວກົດ Enter ກໍໄດ້.</p>`;
     return;
   }
+  probe.res = assess(probe.lat, probe.lng); // a branch may have been closed since the check: never show a stale result
   const {res, lat, lng} = probe;
   const out = $('probeRes');
   if (!res.ranked.length) {
@@ -1212,6 +1224,8 @@ const mostCommon = arr => {
   return Object.entries(c).sort((a, b) => b[1] - a[1])[0]?.[0] || '';
 };
 const NEW_KEY = 'vari_new_customers';
+const REFUSED = new Set(['closed_branch', 'unknown_branch']); // the server will never take these as they are
+const newId = () => (crypto.randomUUID ? crypto.randomUUID() : Date.now().toString(36) + Math.random().toString(36).slice(2)); // client_id: resending is safe
 // ERP address dropdowns use bare names; the 9 districts of Vientiane Capital give the province
 const bare = (v, prefix) => String(v || '').replace(new RegExp('^' + prefix + '\\s*'), '').trim();
 const CAPITAL = new Set(['ຈັນທະບູລີ', 'ສີໂຄດຕະບອງ', 'ໄຊເສດຖາ', 'ສີສັດຕະນາກ', 'ນາຊາຍທອງ', 'ໄຊທານີ', 'ຫາດຊາຍຟອງ', 'ສັງທອງ', 'ປາກງື່ມ']);
@@ -1337,7 +1351,7 @@ function renderNewCustomer(out, branchIdx) {
     name: f.elements.name.value.trim(), phone: f.elements.phone.value.trim(),
     province: f.elements.province.value.trim(), village: f.elements.village.value.trim(), district: f.elements.district.value.trim(),
     branch: f.elements.branch.value === '' ? '' : B[+f.elements.branch.value]['ສາຂາ'], zone: f.elements.zone.value.trim(), day: f.elements.day.value.trim(),
-    note: f.elements.note.value.trim(), lat: +lat.toFixed(6), lng: +lng.toFixed(6),
+    note: f.elements.note.value.trim(), lat: +lat.toFixed(6), lng: +lng.toFixed(6), client_id: newId(),
     maps: `https://www.google.com/maps?q=${lat.toFixed(6)},${lng.toFixed(6)}`
   });
   const asText = c => [`ຊື່ລູກຄ້າ: ${c.name}`, `ເບີໂທ: ${c.phone}`, `ແຂວງ: ${c.province || provinceOf(c.district)}`, `ເມືອງ: ${c.district}`, `ບ້ານ: ${c.village}`,
@@ -1360,10 +1374,10 @@ function renderNewCustomer(out, branchIdx) {
       el.querySelector('.nm').textContent = c.name;
       el.querySelector('small').textContent = [[c.village, c.district].filter(Boolean).join(', '), c.branch, c.phone || '-', (c.saved_at || c.created_at || '').slice(0, 10)].filter(Boolean).join(' · ');
       el.querySelector('.nm').onclick = () => runProbe(c.lat, c.lng);
-      if (serverNew !== null && !c.id) { // kept on this device only: the server refused it (closed or unknown branch)
+      if (serverNew !== null && !c.id) el.querySelector('small').textContent += REFUSED.has(c.err) ? ' · ສົ່ງບໍ່ໄດ້: ສາຂາປິດ/ບໍ່ມີ' : ' · ລໍຖ້າສົ່ງ (ຍັງບໍ່ມີສັນຍານ)';
+      if (serverNew !== null && !c.id && REFUSED.has(c.err)) { // refused by the server (closed or unknown branch): offer to remove
         const del = document.createElement('button');
         del.type = 'button'; del.className = 'btn'; del.textContent = 'ລຶບອອກຈາກເຄື່ອງນີ້';
-        el.querySelector('small').textContent += ' · ຍັງບໍ່ໄດ້ສົ່ງ: ສາຂາປິດ/ບໍ່ມີ';
         del.onclick = () => {
           if (!confirm(`ລຶບ ${c.name} ອອກຈາກເຄື່ອງນີ້? (ບັນທຶກໃໝ່ກັບສາຂາອື່ນກ່ອນ ຖ້າຍັງຕ້ອງການ)`)) return;
           const rest = localNew().filter(x => !(x.name === c.name && x.lat === c.lat && x.lng === c.lng && x.saved_at === c.saved_at));
@@ -1410,12 +1424,16 @@ function renderNewCustomer(out, branchIdx) {
       btn.disabled = true;
       const r = await api('addNew', {customer: c});
       btn.disabled = false;
-      if (!r.ok) {
-        if (r.error === 'auth') { serverNew = null; toast(`${errMsg(r)} · ກົດ ບັນທຶກ ອີກຄັ້ງເພື່ອເກັບໃນເຄື່ອງນີ້ກ່ອນ`); }
-        else toast(`ບັນທຶກບໍ່ໄດ້: ${errMsg(r)}`);
+      if (!r.ok && (r.error === 'network' || r.error === 'server' || r.error === 'auth')) {
+        // weak signal / expired PIN: keep it on this phone, it is sent on the next sync (client_id stops a double insert)
+        if (r.error === 'auth') serverNew = null;
+        if (!store.set(NEW_KEY, JSON.stringify([...localNew(), {...c, saved_at: new Date().toISOString(), err: r.error}]))) { toast(`ບັນທຶກບໍ່ໄດ້: ${errMsg(r)}`); return; }
+        newDraft = null; toast(`${errMsg(r)} · ເກັບໄວ້ໃນເຄື່ອງນີ້ແລ້ວ: ຈະສົ່ງໃຫ້ທີມເມື່ອມີສັນຍານ${r.error === 'auth' ? ' ແລະ ເຂົ້າ PIN' : ''}`);
+        count(); if ($('newRows').innerHTML !== '') renderNewRows();
         return;
       }
-      serverNew = [r.customer, ...serverNew];
+      if (!r.ok) { toast(`ບັນທຶກບໍ່ໄດ້: ${errMsg(r)}`); return; }
+      serverNew = [r.customer, ...serverNew.filter(x => x.id !== r.customer.id)];
       // a refused copy of the same customer kept on this device is now replaced by the saved one
       const kept = localNew().filter(x => !(x.name === c.name && x.phone === c.phone && x.lat === c.lat && x.lng === c.lng));
       if (kept.length !== localNew().length) store.set(NEW_KEY, kept.length ? JSON.stringify(kept) : null);
@@ -1436,7 +1454,7 @@ function downloadNew() {
   const cell = (k, v) => k === 'phone' && v ? `="${String(v).replace(/"/g, '')}"` : typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
   const head = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ແຂວງ', 'ເມືອງ', 'ບ້ານ', 'ສາຂາ', 'ໂຊນ', 'ວັນສົ່ງ', 'Lat', 'Lng', 'Google Maps', 'ໝາຍເຫດ', 'ບັນທຶກເມື່ອ', 'ຜູ້ບັນທຶກ'];
   const q = v => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : (v ?? '');
-  const csv = '﻿' + [head.join(','), ...newList().map(c => ({...c, province: c.province || provinceOf(c.district), maps: c.maps || `https://www.google.com/maps?q=${c.lat},${c.lng}`, saved_at: c.saved_at || c.created_at, note: serverNew !== null && !c.id ? ['ຍັງບໍ່ໄດ້ສົ່ງໃຫ້ທີມ', c.note].filter(Boolean).join(' · ') : c.note})).map(c => cols.map(k => q(cell(k, c[k]))).join(','))].join('\n');
+  const csv = '﻿' + [head.join(','), ...newList().map(c => ({...c, province: c.province || provinceOf(c.district), maps: c.maps || `https://www.google.com/maps?q=${c.lat},${c.lng}`, saved_at: c.saved_at || c.created_at, note: !c.id ? ['ຍັງບໍ່ໄດ້ສົ່ງໃຫ້ທີມ', c.note].filter(Boolean).join(' · ') : c.note})).map(c => cols.map(k => q(cell(k, c[k]))).join(','))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
   a.download = `new_customers_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -1474,6 +1492,7 @@ function open(i, fly) {
 }
 function close() {
   stopPlacing();
+  editing = false;
   const k = selected;
   selected = null; view = 'list';
   if (k !== null && markers[k]) markers[k].getElement().classList.remove('sel');
@@ -1483,7 +1502,8 @@ function close() {
   render();
 }
 // keep the target visible beside the panel (desktop) or above the sheet (phone)
-const pad = () => isPhone() ? {bottom: innerHeight * .46, top: 110, left: 0, right: 0} :
+const sheetH = () => body.classList.contains('collapsed') ? 96 : innerHeight * (body.classList.contains('expanded') ? .88 : .46); // target height, not the mid-animation one (CSS uses dvh = innerHeight)
+const pad = () => isPhone() ? {bottom: sheetH() || innerHeight * .46, top: 110, left: 0, right: 0} :
   {left: body.classList.contains('collapsed') ? 0 : 408, top: 0, right: 0, bottom: 0};
 
 // ---------- placing / moving a pin by clicking the map ----------
@@ -1598,7 +1618,7 @@ function renderLayers() {
     btn.className = `layer ${s.cls}`;
     btn.setAttribute('aria-pressed', k === styleKey);
     btn.innerHTML = `<span>${s.name}</span>`;
-    btn.onclick = () => setStyle(k);
+    btn.onclick = () => { setStyle(k); $('layerMenu').classList.remove('open'); $('layerBtn').setAttribute('aria-expanded', false); }; // picked: close the menu
     $('layerMenu').appendChild(btn);
   });
 }
