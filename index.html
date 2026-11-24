@@ -237,6 +237,12 @@ body.collapsed #layers{left:36px}
   background:var(--panel);color:var(--brand);font-weight:600;font-size:14px;box-shadow:var(--shadow);cursor:pointer}
 #download svg{width:20px;height:20px;fill:currentColor}
 #download:hover{background:var(--hover)}
+#download[hidden]{display:none}
+.new-row{display:grid;grid-template-columns:1fr auto;gap:2px 10px;align-items:center;padding:8px 0;border-top:1px solid var(--line)}
+.new-row .nm{grid-column:1;text-align:left;font-size:14px}
+.new-row small{grid-column:1;color:var(--muted);font-size:12px}
+.new-row .new-acts{grid-column:2;grid-row:1/3}
+.new-row .btn{height:36px;font-size:12.5px;padding:0 12px}
 
 #banner{position:fixed;top:72px;left:50%;transform:translateX(calc(-50% + 204px));z-index:6;display:none;align-items:center;gap:12px;
   background:#202124;color:#fff;padding:8px 8px 8px 18px;border-radius:24px;box-shadow:var(--shadow-lg);font-size:14px;font-weight:500}
@@ -503,7 +509,7 @@ function addMarker(i) {
   const b = B[i];
   const m = new maplibregl.Marker({element: markerEl(b, i), anchor: 'bottom-left', offset: [-14, 0], draggable: true})
     .setLngLat([b.Lng, b.Lat]).addTo(map);
-  m.on('dragend', () => { setReal(b, m.getLngLat()); redraw(i); toast(`ອັບເດດ ${short(b['ສາຂາ'])} ເປັນພິກັດຈິງ`); });
+  m.on('dragend', () => { setReal(b, m.getLngLat()); redraw(i); saveBranch(i, {lat: b.Lat, lng: b.Lng}, `ຍ້າຍໝຸດ ${short(b['ສາຂາ'])}`); });
   return m;
 }
 const markers = B.map((b, i) => b.Lat === '' ? null : addMarker(i));
@@ -626,7 +632,7 @@ function toggleClosed(i) {
   }
   setDots();
   render();
-  toast(closing ? `ແຈ້ງປິດ ${short(b['ສາຂາ'])} ແລ້ວ. ກົດ ດາວໂຫຼດ CSV ເພື່ອບັນທຶກ` : `ເປີດ ${short(b['ສາຂາ'])} ຄືນແລ້ວ`);
+  saveBranch(i, {status: b['ສະຖານະ']}, closing ? `ແຈ້ງປິດ ${short(b['ສາຂາ'])}` : `ເປີດ ${short(b['ສາຂາ'])} ຄືນ`);
 }
 
 function renderPlace(i) {
@@ -678,6 +684,69 @@ const store = {
 };
 let token = gateToken || store.get('bp_token'), profiles = {}, editing = false;
 let draft = null; // unsaved profile edits {branch, values}: survive any re-render of the card
+let serverNew = null; // shared new-customer list from the server; null = not logged in (this device's list is used)
+
+// branch pin / open-closed edits go to the server so the whole team sees them (offline private copy: CSV only)
+const PENDING_KEY = 'vari_pending_branch';
+const pendingSaves = () => { try { return JSON.parse(store.get(PENDING_KEY) || '{}'); } catch (_) { return {}; } };
+async function saveBranch(i, fields, okMsg) {
+  const name = B[i]['ສາຂາ'];
+  if (!token && EMBEDDED) { toast(`${okMsg} (ໃນເຄື່ອງນີ້ເທົ່ານັ້ນ: ດາວໂຫຼດ CSV ຫຼື ເຂົ້າ PIN ເພື່ອບັນທຶກໃຫ້ທີມ)`); return; }
+  const r = token ? await api('setBranch', {branch: name, ...fields}) : {ok: false, error: 'auth'};
+  if (r.ok) { toast(`${okMsg} · ບັນທຶກແລ້ວ ທຸກຄົນໃນທີມເຫັນ`); return; }
+  if (r.error === 'bad_input') { toast(`ບັນທຶກບໍ່ໄດ້: ${errMsg(r)}`); return; } // retrying would fail the same way
+  // keep it on this device and retry on the next sync, so a weak signal does not lose the pin
+  const q = pendingSaves(); q[name] = {...(q[name] || {}), ...fields}; store.set(PENDING_KEY, JSON.stringify(q));
+  toast(`ຍັງບໍ່ໄດ້ບັນທຶກຂຶ້ນເຊີບເວີ (${errMsg(r)}): ຈະລອງໃໝ່ອັດຕະໂນມັດ`);
+}
+async function flushPending() {
+  const q = pendingSaves(), left = {};
+  for (const [branch, fields] of Object.entries(q)) {
+    const r = await api('setBranch', {branch, ...fields});
+    // drop only an edit for a branch that no longer exists anywhere; anything else is retried next time
+    if (!r.ok && !(r.detail === 'unknown_branch' && !B.some(b => b['ສາຂາ'] === branch))) left[branch] = fields;
+    if (!r.ok && !left[branch]) toast(`ຍົກເລີກການແກ້ທີ່ຄ້າງໄວ້ຂອງ ${branch}: ສາຂານີ້ບໍ່ມີແລ້ວ`);
+  }
+  store.set(PENDING_KEY, Object.keys(left).length ? JSON.stringify(left) : null);
+  if (Object.keys(q).length && !Object.keys(left).length) toast('ບັນທຶກການແກ້ທີ່ຄ້າງໄວ້ຂຶ້ນເຊີບເວີແລ້ວ');
+}
+// new customers saved on this phone before the shared list existed: send them up once, then clear
+async function flushLocalNew() {
+  const list = localNew();
+  if (!list.length) return;
+  const left = [];
+  for (const c of list) {
+    const r = await api('addNew', {customer: c});
+    if (r.ok) serverNew = [r.customer, ...(serverNew || [])]; else left.push(c); // never delete a customer that is nowhere else
+  }
+  if (left.length) toast(`ລູກຄ້າໃໝ່ ${left.length} ລາຍ ຍັງສົ່ງບໍ່ໄດ້ (ກວດຊື່ສາຂາ): ຍັງເກັບໄວ້ໃນເຄື່ອງນີ້`);
+  store.set(NEW_KEY, left.length ? JSON.stringify(left) : null);
+  if (list.length > left.length) toast(`ສົ່ງລາຍການລູກຄ້າໃໝ່ຈາກເຄື່ອງນີ້ ${list.length - left.length} ລາຍ ໃຫ້ທີມແລ້ວ`);
+}
+// apply the team's saved edits on top of the built map data
+function applyState(rows) {
+  (rows || []).forEach(s => {
+    const i = B.findIndex(b => b['ສາຂາ'] === s.branch);
+    if (i < 0) return;
+    const b = B[i];
+    if (s.lat != null && s.lng != null) {
+      Object.assign(b, {Lat: s.lat, Lng: s.lng, 'ທີ່ມາ': REAL});
+      if (markers[i]) markers[i].setLngLat([s.lng, s.lat]); else markers[i] = addMarker(i);
+    }
+    if (s.status) b['ສະຖານະ'] = s.status === CLOSED ? CLOSED : OPEN;
+    if (markers[i]) {
+      markers[i].getElement().classList.toggle('closed', isClosed(b));
+      markers[i].getElement().querySelector('.pin').outerHTML = pinSvg(colorOf(i), b['ທີ່ມາ'] === REAL);
+    }
+  });
+  reassignCache.clear();
+  setDots();
+}
+function applyServer(r) {
+  setProfiles(r.profiles);
+  applyState(r.state);
+  if (Array.isArray(r.newCustomers)) serverNew = r.newCustomers;
+}
 const ERR = {bad_pin: 'PIN ບໍ່ຖືກ', locked: 'ລັອກຊົ່ວຄາວ ລອງໃໝ່ພາຍຫຼັງ', conflict: 'ມີຄົນແກ້ກ່ອນແລ້ວ: ໂຫຼດຂໍ້ມູນໃໝ່ແລ້ວ, ສິ່ງທີ່ທ່ານພິມຍັງຢູ່ ກົດບັນທຶກອີກຄັ້ງ',
   not_ready: 'ລະບົບຍັງບໍ່ໄດ້ຕັ້ງ PIN', bad_input: 'ຂໍ້ມູນບໍ່ຖືກ', server: 'ເຊີບເວີຜິດພາດ', network: 'ເຊື່ອມຕໍ່ອິນເຕີເນັດບໍ່ໄດ້',
   auth: 'ໝົດເວລາເຂົ້າລະບົບ ກະລຸນາໃສ່ PIN ໃໝ່'};
@@ -699,11 +768,21 @@ function setProfiles(list) { profiles = Object.fromEntries((list || []).map(p =>
 function rerenderCard() { if (view === 'place' && selected !== null) renderPlace(selected); else if (view === 'list') render(); }
 // after an await the user may have moved on: only repaint if this branch's card is still showing
 const refreshIf = i => { if (view === 'place' && selected === i) renderPlace(i); else if (view === 'list') render(); };
+let syncing = false; // one sync at a time: a second one could upload this device's new customers twice
 async function loadProfiles(force = false) {
-  if (!token) return;
+  if (!token || syncing) return;
+  syncing = true;
+  try { await syncOnce(force); } finally { syncing = false; }
+}
+async function syncOnce(force) {
+  await flushPending(); // send edits made while offline first, so the list below already contains them
   const r = await api('list');
-  if (r.ok) setProfiles(r.profiles);
-  else if (r.error === 'auth') toast(errMsg(r));
+  if (r.ok) {
+    applyServer(r);
+    const q = pendingSaves(); // re-apply anything still waiting so the server copy does not hide it
+    applyState(Object.entries(q).map(([branch, f]) => ({branch, ...f})));
+    await flushLocalNew();
+  } else if (r.error === 'auth') { serverNew = null; toast(errMsg(r)); }
   if (editing && !force && r.error !== 'auth') return; // keep focus/typing in an open form; data is used on next render
   if (view === 'list') renderList(); else rerenderCard();
 }
@@ -720,7 +799,8 @@ function renderProfile(i) {
       e.preventDefault();
       const r = await api('login', {pin: $('pinIn').value});
       if (!r.ok) { toast(errMsg(r)); return; }
-      token = r.token; store.set('bp_token', token); setProfiles(r.profiles); rerenderCard();
+      token = r.token; store.set('bp_token', token); applyServer(r); rerenderCard();
+      loadProfiles(true); // also sends edits / new customers kept on this device
     };
     return;
   }
@@ -774,7 +854,7 @@ function renderProfileForm(i) {
     f.oninput(); // keep what is typed: redraw() re-renders this form
     setReal(B[i], c);
     if (markers[i]) markers[i].setLngLat([c.lng, c.lat]); else markers[i] = addMarker(i);
-    redraw(i); toast(`ຕັ້ງໝຸດ ${short(name)} ຈາກລິ້ງແລ້ວ. ກົດ ດາວໂຫຼດ CSV ເພື່ອບັນທຶກ`);
+    redraw(i); saveBranch(i, {lat: B[i].Lat, lng: B[i].Lng}, `ຕັ້ງໝຸດ ${short(name)} ຈາກລິ້ງ`);
   };
   $('cancelProf').onclick = () => { editing = false; draft = null; renderProfile(i); };
   const busy = on => f.querySelectorAll('button, input[type=file]').forEach(el => el.disabled = on);
@@ -999,7 +1079,9 @@ function nearestAll(lat, lng, n) {
   });
   return best;
 }
-const newList = () => { try { return JSON.parse(store.get(NEW_KEY) || '[]'); } catch (_) { return []; } };
+const localNew = () => { try { return JSON.parse(store.get(NEW_KEY) || '[]'); } catch (_) { return []; } };
+const allNew = () => serverNew !== null ? serverNew : localNew(); // incl. already-created ones (duplicate checks)
+const newList = () => allNew().filter(c => !c.status || c.status === 'ລໍຖ້າ'); // still waiting for a user account
 
 function showCustomer(k) {
   const [la, ln] = DATA.points[k];
@@ -1028,6 +1110,7 @@ function renderNewCustomer(out, branchIdx) {
       <label>ໝາຍເຫດ<input name="note" maxlength="200"></label>
       <div class="probe-acts"><button type="button" class="btn" id="copyNew">${ICON.copy}ສຳເນົາໄປສ້າງຢູເຊີ</button><button class="btn fill" type="submit">ບັນທຶກລາຍການ</button></div>
       <p class="prof-meta" id="newCount"></p>
+      <div id="newRows"></div>
     </form>`;
   out.appendChild(sec);
   near.forEach(({k, d}) => {
@@ -1061,7 +1144,7 @@ function renderNewCustomer(out, branchIdx) {
     if (key.length < 8) return;
     const col = DATA.infoCols.indexOf('ເບີໂທ');
     const hits = DATA.info.flatMap((row, k) => phoneKeys(row[col]).includes(key) ? [k] : []);
-    const saved = newList().filter(c => phoneKeys(c.phone).includes(key));
+    const saved = allNew().filter(c => phoneKeys(c.phone).includes(key));
     if (!hits.length && !saved.length) { box.innerHTML = '<p class="ok-note">ບໍ່ພົບເບີນີ້ໃນລູກຄ້າເກົ່າ</p>'; return; }
     box.innerHTML = `<div class="warn">${ICON.info}<span>ເບີນີ້ມີແລ້ວ ${hits.length + saved.length} ລາຍການ: ກວດກ່ອນສ້າງໃໝ່${hits.length > 5 ? ' (ໃຊ້ຮ່ວມກັນຫຼາຍລາຍ ອາດເປັນເບີບໍລິສັດ ຫຼື ເບີໃສ່ແທນ)' : ''}</span></div>`;
     hits.slice(0, 5).forEach(k => {
@@ -1071,7 +1154,7 @@ function renderNewCustomer(out, branchIdx) {
       el.onclick = () => showCustomer(k);
       box.appendChild(el);
     });
-    saved.forEach(c => { const el = document.createElement('p'); el.className = 'prof-meta'; el.textContent = `ລາຍການລູກຄ້າໃໝ່ທີ່ບັນທຶກແລ້ວ: ${c.name} (${(c.saved_at || '').slice(0, 10)})`; box.appendChild(el); });
+    saved.forEach(c => { const el = document.createElement('p'); el.className = 'prof-meta'; el.textContent = `ລາຍການລູກຄ້າໃໝ່ທີ່ບັນທຶກແລ້ວ: ${c.name} (${(c.saved_at || c.created_at || '').slice(0, 10)}${c.status === 'ສ້າງແລ້ວ' ? ' · ສ້າງຢູເຊີແລ້ວ' : ''})`; box.appendChild(el); });
   };
   const record = () => ({
     name: f.elements.name.value.trim(), phone: f.elements.phone.value.trim(),
@@ -1082,11 +1165,38 @@ function renderNewCustomer(out, branchIdx) {
   const asText = c => [`ຊື່: ${c.name}`, `ເບີໂທ: ${c.phone}`, `ສາຂາ: ${c.branch}`, `ໂຊນ: ${c.zone}`, `ວັນສົ່ງ: ${c.day}`,
     `ພິກັດ: ${c.lat}, ${c.lng}`, `ແຜນທີ່: ${c.maps}`, c.note && `ໝາຍເຫດ: ${c.note}`].filter(Boolean).join('\n');
   const count = () => {
-    const n = newList().length;
-    $('newCount').innerHTML = n ? `ລາຍການລູກຄ້າໃໝ່ໃນເຄື່ອງນີ້: ${n} ລາຍ · <button type="button" class="linkbtn" id="dlNew">ດາວໂຫຼດ CSV</button> · <button type="button" class="linkbtn" id="clrNew">ລ້າງລາຍການ</button>` : '';
-    if (!n) return;
+    const n = newList().length, shared = serverNew !== null;
+    $('newCount').innerHTML = n ? `${shared ? 'ລູກຄ້າໃໝ່ລໍຖ້າສ້າງຢູເຊີ (ທັງທີມ)' : 'ລາຍການລູກຄ້າໃໝ່ໃນເຄື່ອງນີ້'}: ${n} ລາຍ · <button type="button" class="linkbtn" id="showNew">ເບິ່ງລາຍການ</button> · <button type="button" class="linkbtn" id="dlNew">ດາວໂຫຼດ CSV</button>${shared ? '' : ' · <button type="button" class="linkbtn" id="clrNew">ລ້າງລາຍການ</button>'}` : '';
+    if (!n) { $('newRows').innerHTML = ''; return; }
     $('dlNew').onclick = downloadNew;
-    $('clrNew').onclick = () => { if (confirm(`ລ້າງລາຍການລູກຄ້າໃໝ່ ${n} ລາຍ ໃນເຄື່ອງນີ້? (ດາວໂຫຼດ CSV ໄວ້ກ່ອນ ຖ້າຍັງບໍ່ໄດ້ສ້າງຢູເຊີ)`)) { if (!store.set(NEW_KEY, null)) toast('ລ້າງລາຍການບໍ່ໄດ້: ບຣາວເຊີບໍ່ອະນຸຍາດ'); count(); } };
+    $('showNew').onclick = () => { $('newRows').innerHTML ? ($('newRows').innerHTML = '') : renderNewRows(); };
+    if (!shared) $('clrNew').onclick = () => { if (confirm(`ລ້າງລາຍການລູກຄ້າໃໝ່ ${n} ລາຍ ໃນເຄື່ອງນີ້? (ດາວໂຫຼດ CSV ໄວ້ກ່ອນ ຖ້າຍັງບໍ່ໄດ້ສ້າງຢູເຊີ)`)) { if (!store.set(NEW_KEY, null)) toast('ລ້າງລາຍການບໍ່ໄດ້: ບຣາວເຊີບໍ່ອະນຸຍາດ'); count(); } };
+  };
+  // the waiting list, each row can be marked "user created" (shared list) or opened on the map
+  const renderNewRows = () => {
+    const box = $('newRows'); box.innerHTML = '';
+    newList().forEach(c => {
+      const el = document.createElement('div');
+      el.className = 'new-row';
+      el.innerHTML = `<button type="button" class="linkbtn nm"></button><small></small><span class="new-acts"></span>`;
+      el.querySelector('.nm').textContent = c.name;
+      el.querySelector('small').textContent = `${c.branch} · ${c.phone || '-'} · ${(c.saved_at || c.created_at || '').slice(0, 10)}`;
+      el.querySelector('.nm').onclick = () => runProbe(c.lat, c.lng);
+      if (serverNew !== null && c.id) {
+        const done = document.createElement('button');
+        done.type = 'button'; done.className = 'btn'; done.textContent = 'ສ້າງຢູເຊີແລ້ວ';
+        done.onclick = async () => {
+          if (!confirm(`ສ້າງຢູເຊີໃຫ້ ${c.name} ແລ້ວແທ້ບໍ? ລາຍການຈະອອກຈາກລາຍການລໍຖ້າ.`)) return;
+          done.disabled = true;
+          const r = await api('markNew', {id: c.id, status: 'ສ້າງແລ້ວ'});
+          if (!r.ok) { done.disabled = false; toast(errMsg(r)); if (r.error === 'auth') { serverNew = null; count(); } return; }
+          serverNew = serverNew.map(x => x.id === c.id ? r.customer : x);
+          toast(`${c.name}: ສ້າງຢູເຊີແລ້ວ`); count(); renderNewRows();
+        };
+        el.querySelector('.new-acts').appendChild(done);
+      }
+      box.appendChild(el);
+    });
   };
   count();
   // keep typed values if the probe view re-renders (search box, chips, dragging a pin...) for the same spot
@@ -1101,27 +1211,40 @@ function renderNewCustomer(out, branchIdx) {
     const t = asText(record());
     navigator.clipboard.writeText(t).then(() => toast('ສຳເນົາແລ້ວ ເອົາໄປວາງຕອນສ້າງຢູເຊີ'), () => toast(t));
   };
-  f.onsubmit = e => {
+  f.onsubmit = async e => {
     e.preventDefault();
     if (sameSpot.length && !confirm('ມີລູກຄ້າເກົ່າຢູ່ຈຸດດຽວກັນ (ພາຍໃນ 50 ມ). ຢືນຢັນວ່າແມ່ນລູກຄ້າໃໝ່?')) return;
-    const c = record(), list = newList(), last = list[list.length - 1];
-    if (last && ['name', 'phone', 'lat', 'lng'].every(k => last[k] === c[k])) { toast('ລາຍການນີ້ບັນທຶກແລ້ວ'); return; } // double tap
-    if (!store.set(NEW_KEY, JSON.stringify([...list, {...c, saved_at: new Date().toISOString()}]))) {
+    const c = record();
+    if (newList().some(x => ['name', 'phone'].every(k => x[k] === c[k]) && x.lat === c.lat && x.lng === c.lng)) { toast('ລາຍການນີ້ບັນທຶກແລ້ວ'); return; } // double tap
+    const btn = f.querySelector('button[type=submit]');
+    if (serverNew !== null) {
+      btn.disabled = true;
+      const r = await api('addNew', {customer: c});
+      btn.disabled = false;
+      if (!r.ok) {
+        if (r.error === 'auth') { serverNew = null; toast(`${errMsg(r)} · ກົດ ບັນທຶກ ອີກຄັ້ງເພື່ອເກັບໃນເຄື່ອງນີ້ກ່ອນ`); }
+        else toast(`ບັນທຶກບໍ່ໄດ້: ${errMsg(r)}`);
+        return;
+      }
+      serverNew = [r.customer, ...serverNew];
+    } else if (!store.set(NEW_KEY, JSON.stringify([...localNew(), {...c, saved_at: new Date().toISOString()}]))) {
       toast('ບັນທຶກບໍ່ໄດ້: ບຣາວເຊີບໍ່ອະນຸຍາດ (ໂໝດສ່ວນຕົວ?) ໃຊ້ປຸ່ມ ສຳເນົາ ແທນ'); return;
     }
     newDraft = null;
-    toast('ບັນທຶກໃສ່ລາຍການລູກຄ້າໃໝ່ແລ້ວ');
+    toast(serverNew !== null ? 'ບັນທຶກແລ້ວ: ທັງທີມເຫັນລາຍການນີ້' : 'ບັນທຶກໃສ່ລາຍການລູກຄ້າໃໝ່ແລ້ວ');
+    const open = $('newRows').innerHTML !== '';
     count();
+    if (open) renderNewRows();
   };
 }
 
 function downloadNew() {
-  const cols = ['name', 'phone', 'branch', 'zone', 'day', 'lat', 'lng', 'maps', 'note', 'saved_at'];
+  const cols = ['name', 'phone', 'branch', 'zone', 'day', 'lat', 'lng', 'maps', 'note', 'saved_at', 'created_by'];
   // typed text starting with = + - @ would run as an Excel formula; phone keeps its leading 0 as ="020..."
   const cell = (k, v) => k === 'phone' && v ? `="${String(v).replace(/"/g, '')}"` : typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
-  const head = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ສາຂາ', 'ແຜນ/ໂຊນ', 'ວັນ', 'Lat', 'Lng', 'Google Maps', 'ໝາຍເຫດ', 'ບັນທຶກເມື່ອ'];
+  const head = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ສາຂາ', 'ແຜນ/ໂຊນ', 'ວັນ', 'Lat', 'Lng', 'Google Maps', 'ໝາຍເຫດ', 'ບັນທຶກເມື່ອ', 'ຜູ້ບັນທຶກ'];
   const q = v => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : (v ?? '');
-  const csv = '﻿' + [head.join(','), ...newList().map(c => cols.map(k => q(cell(k, c[k]))).join(','))].join('\n');
+  const csv = '﻿' + [head.join(','), ...newList().map(c => ({...c, maps: c.maps || `https://www.google.com/maps?q=${c.lat},${c.lng}`, saved_at: c.saved_at || c.created_at})).map(c => cols.map(k => q(cell(k, c[k]))).join(','))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
   a.download = `new_customers_${new Date().toISOString().slice(0, 10)}.csv`;
@@ -1202,7 +1325,7 @@ map.on('click', e => {
   stopPlacing();
   body.classList.remove('collapsed');
   redraw(i);
-  toast(`ວາງ ${short(B[i]['ສາຂາ'])} ແລ້ວ`);
+  saveBranch(i, {lat: B[i].Lat, lng: B[i].Lng}, `ວາງໝຸດ ${short(B[i]['ສາຂາ'])}`);
 });
 
 // ---------- controls ----------
@@ -1308,6 +1431,7 @@ loadProfiles();
 // ---------- PIN gate (web build): no customer data reaches the browser before a valid team PIN ----------
 (async function boot() {
   if (EMBEDDED) return start(EMBEDDED);
+  document.getElementById('download').hidden = true; // web: pins/status save online; CSV export is for the private copy
   const gate = document.getElementById('gate'), msg = document.getElementById('gateMsg'), form = document.getElementById('gateForm');
   const lsGet = k => { try { return localStorage.getItem(k); } catch (_) { return null; } };
   const lsSet = (k, v) => { try { v === null ? localStorage.removeItem(k) : localStorage.setItem(k, v); } catch (_) { /* private mode */ } };
