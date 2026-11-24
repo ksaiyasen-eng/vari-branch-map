@@ -573,7 +573,7 @@ function custCard(k) {
       ${tel ? `<a class="btn fill" href="tel:${tel}">ໂທ</a>` : ''}
       <a class="btn" href="https://www.google.com/maps/dir/?api=1&destination=${la},${ln}" target="_blank" rel="noopener">ເສັ້ນທາງ</a>
     </div>
-    <dl>${row('ເບີໂທ', v['ເບີໂທ'])}${row('ບ້ານ', v['ບ້ານ'])}${row('ເມືອງ', v['ເມືອງ'])}
+    <dl>${row('ເບີໂທ', v['ເບີໂທ'])}${row('ບ້ານ', bare(v['ບ້ານ'], 'ບ້ານ'))}${row('ເມືອງ', bare(v['ເມືອງ'], 'ເມືອງ'))}
       ${row('ຄວາມຖີ່', v['ຄວາມຖີ່/ອາທິດ'] && v['ຄວາມຖີ່/ອາທິດ'] + ' ຄັ້ງ/ອາທິດ')}${row('ຖັງ/ຮອບ', v['ສົ່ງ (ຖັງ)/ຮອບ'])}
       ${row('ສິນຄ້າ', v['ຜະລິດຕະພັນ'])}${row('ຊື້ລ່າສຸດ', v['ວັນຊື້ລ່າສຸດ'])}${row('ໂຊນ / ວັນສົ່ງ', [v['ແຜນ/ໂຊນ'], v['ວັນ']].filter(Boolean).join(' · '))}
       ${row('ຜູ້ຮັບຜິດຊອບ', v['ຜູ້ຮັບຜິດຊອບ'])}</dl></div>`;
@@ -698,7 +698,7 @@ function renderPlace(i) {
       <div class="fact">${ICON.people}<div>${b['ລູກຄ້າ'].toLocaleString()} ລູກຄ້າ<small>ຈຸດລູກຄ້າທີ່ມີພິກັດ</small></div></div>
       <div class="fact">${ICON.pin}<div>${has ? `<a href="${gm}" target="_blank" rel="noopener">${b.Lat}, ${b.Lng}</a>` : 'ຍັງບໍ່ມີພິກັດ'}<small>${b['ທີ່ມາ'] === REAL ? 'ພິກັດຮ້ານຈິງ' : b['ທີ່ມາ'] === EST ? 'ປະມານ: ຈຸດກາງຂອງລູກຄ້າ, ບໍ່ແມ່ນທີ່ຕັ້ງຮ້ານ' : 'ກົດ ວາງໝຸດ ແລ້ວກົດແຜນທີ່'}</small></div></div>
     </div>
-    <div class="tip">${ICON.info.replace('<svg', '<svg style="display:inline;width:16px;height:16px;vertical-align:-3px;fill:currentColor"')} ລາກໝຸດເທິງແຜນທີ່ໄປບ່ອນຮ້ານຈິງໄດ້ເລີຍ. ແກ້ຄົບແລ້ວ ກົດ ດາວໂຫຼດ CSV ແລ້ວເອົາໄປແທນ branch_locations.csv.</div>`;
+    <div class="tip">${ICON.info.replace('<svg', '<svg style="display:inline;width:16px;height:16px;vertical-align:-3px;fill:currentColor"')} ລາກໝຸດເທິງແຜນທີ່ໄປບ່ອນຮ້ານຈິງໄດ້ເລີຍ. ລະບົບບັນທຶກໃຫ້ທັງທີມ (ຕ້ອງເຂົ້າ PIN); ຄ່າທີ່ແກ້ໃນເວັບຈະໃຊ້ແທນໄຟລ໌ CSV.</div>`;
   $('panelBody').querySelector('h2').textContent = b['ສາຂາ'];
   $('backBtn').onclick = close;
   $('moveBtn').onclick = () => startPlacing(i);
@@ -730,18 +730,19 @@ const PENDING_KEY = 'vari_pending_branch';
 const pendingSaves = () => { try { return JSON.parse(store.get(PENDING_KEY) || '{}'); } catch (_) { return {}; } };
 async function saveBranch(i, fields, okMsg) {
   const name = B[i]['ສາຂາ'];
-  if (!token && EMBEDDED) { toast(`${okMsg} (ໃນເຄື່ອງນີ້ເທົ່ານັ້ນ: ດາວໂຫຼດ CSV ຫຼື ເຂົ້າ PIN ເພື່ອບັນທຶກໃຫ້ທີມ)`); return; }
   const r = token ? await api('setBranch', {branch: name, ...fields}) : {ok: false, error: 'auth'};
   if (r.ok) { toast(`${okMsg} · ບັນທຶກແລ້ວ ທຸກຄົນໃນທີມເຫັນ`); return; }
   if (r.error === 'bad_input') { toast(`ບັນທຶກບໍ່ໄດ້: ${errMsg(r)}`); return; } // retrying would fail the same way
   // keep it on this device and retry on the next sync, so a weak signal does not lose the pin
-  const q = pendingSaves(); q[name] = {...(q[name] || {}), ...fields}; store.set(PENDING_KEY, JSON.stringify(q));
-  toast(`ຍັງບໍ່ໄດ້ບັນທຶກຂຶ້ນເຊີບເວີ (${errMsg(r)}): ຈະລອງໃໝ່ອັດຕະໂນມັດ`);
+  // shortcut: one 'at' per branch from the phone clock; a newer team edit drops the whole queued entry
+  const q = pendingSaves(); q[name] = {...(q[name] || {}), ...fields, at: new Date().toISOString()}; store.set(PENDING_KEY, JSON.stringify(q));
+  toast(r.error === 'auth' ? `${okMsg} · ເກັບໄວ້ໃນເຄື່ອງນີ້: ຈະບັນທຶກໃຫ້ທີມເມື່ອເຂົ້າ PIN` : `ຍັງບໍ່ໄດ້ບັນທຶກຂຶ້ນເຊີບເວີ (${errMsg(r)}): ຈະລອງໃໝ່ອັດຕະໂນມັດ`);
 }
 async function flushPending() {
   const q = pendingSaves(), left = {};
   for (const [branch, fields] of Object.entries(q)) {
     const r = await api('setBranch', {branch, ...fields});
+    if (r.ok && r.skipped) toast(`ການແກ້ທີ່ຄ້າງໄວ້ຂອງ ${branch} ບໍ່ໄດ້ໃຊ້: ທີມແກ້ສາຂານີ້ໃໝ່ກວ່າແລ້ວ`);
     // drop only an edit for a branch that no longer exists anywhere; anything else is retried next time
     if (!r.ok && !(r.detail === 'unknown_branch' && !B.some(b => b['ສາຂາ'] === branch))) left[branch] = fields;
     if (!r.ok && !left[branch]) toast(`ຍົກເລີກການແກ້ທີ່ຄ້າງໄວ້ຂອງ ${branch}: ສາຂານີ້ບໍ່ມີແລ້ວ`);
@@ -758,7 +759,7 @@ async function flushLocalNew() {
     const r = await api('addNew', {customer: c});
     if (r.ok) serverNew = [r.customer, ...(serverNew || [])]; else left.push(c); // never delete a customer that is nowhere else
   }
-  if (left.length) toast(`ລູກຄ້າໃໝ່ ${left.length} ລາຍ ຍັງສົ່ງບໍ່ໄດ້ (ກວດຊື່ສາຂາ): ຍັງເກັບໄວ້ໃນເຄື່ອງນີ້`);
+  if (left.length) toast(`ລູກຄ້າໃໝ່ ${left.length} ລາຍ ຍັງສົ່ງບໍ່ໄດ້ (${left.map(c => c.name).slice(0, 3).join(', ')}): ສາຂາປິດແລ້ວ ຫຼື ບໍ່ມີ. ເບິ່ງໃນ ລາຍການລໍຖ້າ ແລ້ວບັນທຶກໃໝ່ກັບສາຂາອື່ນ`);
   store.set(NEW_KEY, left.length ? JSON.stringify(left) : null);
   if (list.length > left.length) toast(`ສົ່ງລາຍການລູກຄ້າໃໝ່ຈາກເຄື່ອງນີ້ ${list.length - left.length} ລາຍ ໃຫ້ທີມແລ້ວ`);
 }
@@ -787,11 +788,12 @@ function applyServer(r) {
   if (Array.isArray(r.newCustomers)) serverNew = r.newCustomers;
 }
 const ERR = {bad_pin: 'PIN ບໍ່ຖືກ', locked: 'ລັອກຊົ່ວຄາວ ລອງໃໝ່ພາຍຫຼັງ', conflict: 'ມີຄົນແກ້ກ່ອນແລ້ວ: ໂຫຼດຂໍ້ມູນໃໝ່ແລ້ວ, ສິ່ງທີ່ທ່ານພິມຍັງຢູ່ ກົດບັນທຶກອີກຄັ້ງ',
-  not_ready: 'ລະບົບຍັງບໍ່ໄດ້ຕັ້ງ PIN', bad_input: 'ຂໍ້ມູນບໍ່ຖືກ', server: 'ເຊີບເວີຜິດພາດ', network: 'ເຊື່ອມຕໍ່ອິນເຕີເນັດບໍ່ໄດ້',
+  not_ready: 'ລະບົບຍັງບໍ່ໄດ້ຕັ້ງ PIN', closed_branch: 'ສາຂານີ້ປິດແລ້ວ: ເລືອກສາຂາອື່ນ', bad_input: 'ຂໍ້ມູນບໍ່ຖືກ', server: 'ເຊີບເວີຜິດພາດ', network: 'ເຊື່ອມຕໍ່ອິນເຕີເນັດບໍ່ໄດ້',
   auth: 'ໝົດເວລາເຂົ້າລະບົບ ກະລຸນາໃສ່ PIN ໃໝ່'};
 const errMsg = r => (ERR[r.error] || r.error || 'ຜິດພາດ') + (r.error === 'bad_pin' && r.detail ? ` (ເຫຼືອ ${r.detail} ຄັ້ງ)` : r.error === 'locked' && r.detail ? ` ${r.detail} ນາທີ` : '');
 // tel: link for the first number only (a cell may list two numbers)
-const firstTel = s => (String(s || '').split(/[\/,;|]/)[0] || '').replace(/[^\d+]/g, '');
+// 8-digit numbers in the ERP are mobiles stored without 020 (confirmed by user 2026-11-24); 20XXXXXXXX lost its 0
+const firstTel = s => { const t = (String(s || '').split(/[\/,;|]/)[0] || '').replace(/[^\d+]/g, ''); return /^\d{8}$/.test(t) ? '020' + t : /^20\d{8}$/.test(t) ? '0' + t : t; };
 const safeUrl = u => /^https?:\/\//i.test(u || '') ? u : '';
 const bgUrl = u => `url('${esc(u).replace(/'/g, '%27')}')`;
 async function api(action, extra = {}) {
@@ -1125,7 +1127,7 @@ function nearestAll(lat, lng, n) {
   return best;
 }
 const localNew = () => { try { return JSON.parse(store.get(NEW_KEY) || '[]'); } catch (_) { return []; } };
-const allNew = () => serverNew !== null ? serverNew : localNew(); // incl. already-created ones (duplicate checks)
+const allNew = () => serverNew !== null ? [...serverNew, ...localNew()] : localNew(); // incl. created ones + records the server refused (duplicate checks)
 const newList = () => allNew().filter(c => !c.status || c.status === 'ລໍຖ້າ'); // still waiting for a user account
 
 function showCustomer(k) {
@@ -1175,9 +1177,9 @@ function renderNewCustomer(out, branchIdx) {
     const el = document.createElement('button');
     el.type = 'button';
     el.className = 'rk near' + (d <= SAME_SPOT_KM ? ' same' : '');
-    el.innerHTML = `<span class="dot" style="background:${color(i)}"></span><div><div class="nm"></div><small></small></div><b>${fmtKm(d)}</b>`;
+    el.innerHTML = `<span class="dot" style="background:${colorOf(i)}"></span><div><div class="nm"></div><small></small></div><b>${fmtKm(d)}</b>`;
     el.querySelector('.nm').textContent = v['ຊື່ລູກຄ້າ'] || v['ລະຫັດລູກຄ້າ'];
-    el.querySelector('small').textContent = `${v['ລະຫັດລູກຄ້າ']} · ${B[i]['ສາຂາ']}`;
+    el.querySelector('small').textContent = `${v['ລະຫັດລູກຄ້າ']} · ${B[i]['ສາຂາ']}${isClosed(B[i]) ? ' (ປິດແລ້ວ)' : ''}`;
     el.onclick = () => showCustomer(k);
     $('nearList').appendChild(el);
     if (d <= SAME_SPOT_KM) { const c = el.cloneNode(true); c.onclick = el.onclick; $('foundList').appendChild(c); }
@@ -1204,8 +1206,11 @@ function renderNewCustomer(out, branchIdx) {
   };
   f.elements.branch.onchange = suggest; suggest();
   f.elements.village.value = guess.village; f.elements.district.value = guess.district;
-  f.elements.province.value = provinceOf(guess.district);
-  f.elements.district.addEventListener('input', () => { if (!f.elements.province.value) f.elements.province.value = provinceOf(f.elements.district.value); });
+  let autoProv = f.elements.province.value = provinceOf(guess.district);
+  f.elements.district.addEventListener('input', () => {
+    if (f.elements.province.value && f.elements.province.value !== autoProv) return; // typed by hand: keep it
+    autoProv = f.elements.province.value = provinceOf(f.elements.district.value);
+  });
   $('copyMaps').onclick = () => navigator.clipboard.writeText(f.elements.maps.value).then(() => toast('ສຳເນົາລິ້ງແຜນທີ່ແລ້ວ: ວາງໃສ່ຊ່ອງ ຕຳແໜ່ງໃນແຜນທີ່ ໃນ ERP'), () => toast(f.elements.maps.value));
   f.elements.phone.oninput = () => {
     const key = phoneKey(f.elements.phone.value), box = $('phoneWarn');
@@ -1219,7 +1224,7 @@ function renderNewCustomer(out, branchIdx) {
     hits.slice(0, 5).forEach(k => {
       const v = infoOf(k), el = document.createElement('button');
       el.type = 'button'; el.className = 'linkbtn hit';
-      el.textContent = `${v['ຊື່ລູກຄ້າ'] || '-'} · ${v['ລະຫັດລູກຄ້າ']} · ${B[DATA.points[k][2]]['ສາຂາ']}`;
+      el.textContent = `${v['ຊື່ລູກຄ້າ'] || '-'} · ${v['ລະຫັດລູກຄ້າ']} · ${B[DATA.points[k][2]]['ສາຂາ']}${isClosed(B[DATA.points[k][2]]) ? ' (ປິດແລ້ວ)' : ''}`;
       el.onclick = () => showCustomer(k);
       box.appendChild(el);
     });
@@ -1250,8 +1255,19 @@ function renderNewCustomer(out, branchIdx) {
       el.className = 'new-row';
       el.innerHTML = `<button type="button" class="linkbtn nm"></button><small></small><span class="new-acts"></span>`;
       el.querySelector('.nm').textContent = c.name;
-      el.querySelector('small').textContent = [c.village, c.branch, c.phone || '-', (c.saved_at || c.created_at || '').slice(0, 10)].filter(Boolean).join(' · ');
+      el.querySelector('small').textContent = [[c.village, c.district].filter(Boolean).join(', '), c.branch, c.phone || '-', (c.saved_at || c.created_at || '').slice(0, 10)].filter(Boolean).join(' · ');
       el.querySelector('.nm').onclick = () => runProbe(c.lat, c.lng);
+      if (serverNew !== null && !c.id) { // kept on this device only: the server refused it (closed or unknown branch)
+        const del = document.createElement('button');
+        del.type = 'button'; del.className = 'btn'; del.textContent = 'ລຶບອອກຈາກເຄື່ອງນີ້';
+        el.querySelector('small').textContent += ' · ຍັງບໍ່ໄດ້ສົ່ງ: ສາຂາປິດ/ບໍ່ມີ';
+        del.onclick = () => {
+          if (!confirm(`ລຶບ ${c.name} ອອກຈາກເຄື່ອງນີ້? (ບັນທຶກໃໝ່ກັບສາຂາອື່ນກ່ອນ ຖ້າຍັງຕ້ອງການ)`)) return;
+          const rest = localNew().filter(x => !(x.name === c.name && x.lat === c.lat && x.lng === c.lng && x.saved_at === c.saved_at));
+          store.set(NEW_KEY, rest.length ? JSON.stringify(rest) : null); count(); renderNewRows();
+        };
+        el.querySelector('.new-acts').appendChild(del);
+      }
       if (serverNew !== null && c.id) {
         const done = document.createElement('button');
         done.type = 'button'; done.className = 'btn'; done.textContent = 'ສ້າງຢູເຊີແລ້ວ';
@@ -1285,7 +1301,7 @@ function renderNewCustomer(out, branchIdx) {
     e.preventDefault();
     if ((sameSpot.length || sameNew.length) && !confirm('ມີລູກຄ້າຢູ່ຈຸດດຽວກັນແລ້ວ (ພາຍໃນ 50 ມ). ຢືນຢັນວ່າແມ່ນລູກຄ້າໃໝ່?')) return;
     const c = record();
-    if (newList().some(x => ['name', 'phone'].every(k => x[k] === c[k]) && x.lat === c.lat && x.lng === c.lng)) { toast('ລາຍການນີ້ບັນທຶກແລ້ວ'); return; } // double tap
+    if (newList().some(x => ['name', 'phone', 'branch'].every(k => x[k] === c[k]) && x.lat === c.lat && x.lng === c.lng)) { toast('ລາຍການນີ້ບັນທຶກແລ້ວ'); return; } // double tap
     const btn = f.querySelector('button[type=submit]');
     if (serverNew !== null) {
       btn.disabled = true;
@@ -1297,6 +1313,9 @@ function renderNewCustomer(out, branchIdx) {
         return;
       }
       serverNew = [r.customer, ...serverNew];
+      // a refused copy of the same customer kept on this device is now replaced by the saved one
+      const kept = localNew().filter(x => !(x.name === c.name && x.phone === c.phone && x.lat === c.lat && x.lng === c.lng));
+      if (kept.length !== localNew().length) store.set(NEW_KEY, kept.length ? JSON.stringify(kept) : null);
     } else if (!store.set(NEW_KEY, JSON.stringify([...localNew(), {...c, saved_at: new Date().toISOString()}]))) {
       toast('ບັນທຶກບໍ່ໄດ້: ບຣາວເຊີບໍ່ອະນຸຍາດ (ໂໝດສ່ວນຕົວ?) ໃຊ້ປຸ່ມ ສຳເນົາ ແທນ'); return;
     }
@@ -1312,9 +1331,9 @@ function downloadNew() {
   const cols = ['name', 'phone', 'province', 'district', 'village', 'branch', 'zone', 'day', 'lat', 'lng', 'maps', 'note', 'saved_at', 'created_by'];
   // typed text starting with = + - @ would run as an Excel formula; phone keeps its leading 0 as ="020..."
   const cell = (k, v) => k === 'phone' && v ? `="${String(v).replace(/"/g, '')}"` : typeof v === 'string' && /^[=+\-@\t\r]/.test(v) ? "'" + v : v;
-  const head = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ແຂວງ', 'ເມືອງ', 'ບ້ານ', 'ສາຂາ', 'ແຜນ/ໂຊນ', 'ວັນ', 'Lat', 'Lng', 'Google Maps', 'ໝາຍເຫດ', 'ບັນທຶກເມື່ອ', 'ຜູ້ບັນທຶກ'];
+  const head = ['ຊື່ລູກຄ້າ', 'ເບີໂທ', 'ແຂວງ', 'ເມືອງ', 'ບ້ານ', 'ສາຂາ', 'ໂຊນ', 'ວັນສົ່ງ', 'Lat', 'Lng', 'Google Maps', 'ໝາຍເຫດ', 'ບັນທຶກເມື່ອ', 'ຜູ້ບັນທຶກ'];
   const q = v => /[",\n]/.test(String(v ?? '')) ? `"${String(v).replace(/"/g, '""')}"` : (v ?? '');
-  const csv = '﻿' + [head.join(','), ...newList().map(c => ({...c, province: c.province || provinceOf(c.district), maps: c.maps || `https://www.google.com/maps?q=${c.lat},${c.lng}`, saved_at: c.saved_at || c.created_at})).map(c => cols.map(k => q(cell(k, c[k]))).join(','))].join('\n');
+  const csv = '﻿' + [head.join(','), ...newList().map(c => ({...c, province: c.province || provinceOf(c.district), maps: c.maps || `https://www.google.com/maps?q=${c.lat},${c.lng}`, saved_at: c.saved_at || c.created_at, note: serverNew !== null && !c.id ? ['ຍັງບໍ່ໄດ້ສົ່ງໃຫ້ທີມ', c.note].filter(Boolean).join(' · ') : c.note})).map(c => cols.map(k => q(cell(k, c[k]))).join(','))].join('\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'}));
   a.download = `new_customers_${new Date().toISOString().slice(0, 10)}.csv`;
