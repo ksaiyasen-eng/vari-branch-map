@@ -317,6 +317,14 @@ body.labels .mk .lbl,.mk.sel .lbl,.mk:hover .lbl{display:block}
   .layer{width:56px;height:56px}
   /* 44 px touch targets on phones */
   .iconbtn,#zoom .fab,.zgroup button{width:44px;height:44px}
+  .btn,.probe-tools .btn,.new-row .btn,.probe-acts .btn,.cc-acts .btn{height:44px;min-height:44px}
+  .probe-form input,.prof.form input,.prof.form select,.newc-form select{min-height:44px}
+  .linkbtn{min-height:44px;display:inline-flex;align-items:center}
+  /* chips keep their 32 px look but get a 44 px tap area; the sheet handle is a full 44 px bar */
+  .chips{padding:6px 0;margin-top:4px} /* room so the scroll box does not clip the enlarged tap area */
+  .chip{position:relative}
+  .chip::after{content:"";position:absolute;left:0;right:0;top:-6px;bottom:-6px}
+  .handle{min-height:44px;padding:20px 0 0}
   #download{height:44px}
   #download{top:auto;bottom:calc(46vh + 12px);right:64px;height:40px;padding:0 14px}
   #download .txt{display:none}
